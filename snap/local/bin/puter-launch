@@ -1,0 +1,22 @@
+#!/bin/sh
+# Start the service with the settings from `snap set puter ...`.
+set -eu
+
+PUTER_PORT="$(snapctl get port)"
+PUTER_PUB_PORT="$(snapctl get pub-port)"
+PUTER_DOMAIN="$(snapctl get domain)"
+PUTER_PROTOCOL="$(snapctl get protocol)"
+export PUTER_PORT PUTER_PUB_PORT PUTER_DOMAIN PUTER_PROTOCOL
+# Read by the listen call patched into the server at build time.
+PUTER_LISTEN_HOST="$(snapctl get host)"
+export PUTER_LISTEN_HOST
+# The built-in S3 emulator is only used through the server on this machine.
+export FAUXQS_LISTEN_HOST=127.0.0.1
+
+export PUTER_CONFIG_PATH="$SNAP_DATA/config.json"
+"$SNAP/bin/node" "$SNAP/lib/puter-config.mjs" "$PUTER_CONFIG_PATH"
+
+# Upstream keeps its state (SQLite database, KV store, file storage) in
+# ./volatile/runtime, relative to the working directory.
+cd "$SNAP_COMMON"
+exec "$SNAP/bin/node" --enable-source-maps "$SNAP/app/dist/src/backend/index.js"

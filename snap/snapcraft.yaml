@@ -1,0 +1,142 @@
+name: puter
+base: core26
+version: '26.10.1'
+title: Puter
+icon: snap/gui/puter.png
+summary: Self-hosted internet computer, a desktop environment in your browser
+description: |
+  Puter is a self-hosted web desktop: a desktop, file manager, text editor
+  and app store in the browser, with cloud storage for your files, an app
+  and website hosting platform, and the Puter.js API for building apps on
+  top of it.
+
+  This snap runs the self-hosted server with upstream's built-in storage:
+  an SQLite database and local file storage, with no other services to
+  install.
+
+  **Getting started**
+
+  The service starts right after installation and listens on
+  127.0.0.1:4100 (this machine only). Open http://puter.localhost:4100
+  and sign in as admin. The generated password is printed in the service
+  log until you change it:
+
+     sudo snap logs puter -n=all | grep "password for admin"
+
+  **Settings**
+
+     sudo snap set puter port=4100 host=127.0.0.1
+     sudo snap set puter domain=puter.example.com
+     sudo snap set puter protocol=https pub-port=443
+
+  Puter routes by subdomain (api.<domain>, site.<domain>, app.<domain>),
+  so a domain other than puter.localhost needs wildcard DNS. Other
+  upstream settings go in /var/snap/puter/common/config.json.
+license: AGPL-3.0-only
+grade: stable
+confinement: strict
+website: https://puter.com
+source-code:
+  - https://github.com/heyputer/puter
+  - https://github.com/sidalit/puter-snap
+issues:
+  - https://github.com/heyputer/puter/issues
+  - https://github.com/sidalit/puter-snap/issues
+contact: https://github.com/sidalit/puter-snap/issues
+
+platforms:
+  amd64:
+  arm64:
+
+apps:
+  puter:
+    command: bin/puter-launch
+    daemon: simple
+    restart-condition: on-failure
+    plugs:
+      - network
+      - network-bind
+
+parts:
+  # Upstream's image runs on Node 26 (node:26-bookworm-slim); ship the official runtime.
+  node:
+    plugin: nil
+    build-packages:
+      - curl
+      - xz-utils
+    override-build: |
+      version=26.13.0
+      case "$CRAFT_ARCH_BUILD_FOR" in
+        amd64) arch=x64 sum=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997 ;;
+        arm64) arch=arm64 sum=406fe3fbde1c054adff8b297c16fdb5af6659db327c1ac8acd46b56ef1af9a92 ;;
+        *) echo "unsupported architecture $CRAFT_ARCH_BUILD_FOR" >&2; exit 1 ;;
+      esac
+      tarball="node-v$version-linux-$arch.tar.xz"
+      curl -fsSLo "$tarball" "https://nodejs.org/dist/v$version/$tarball"
+      echo "$sum  $tarball" | sha256sum -c -
+      tar -xJf "$tarball" -C "$CRAFT_PART_INSTALL" --strip-components=1 --no-same-owner
+      install -Dm644 "$CRAFT_PART_INSTALL/LICENSE" "$CRAFT_PART_INSTALL/share/doc/node/LICENSE"
+    prime:
+      - bin/node
+      - share/doc/node
+
+  puter:
+    after: [node]
+    plugin: nil
+    source: https://github.com/heyputer/puter.git
+    source-tag: $SNAPCRAFT_PROJECT_VERSION
+    source-depth: 1
+    build-packages:
+      - python3
+      - make
+      - g++
+      - git
+    build-environment:
+      - HUSKY: '0'
+      - npm_config_fund: 'false'
+      - npm_config_audit: 'false'
+      - NODE_OPTIONS: --max-old-space-size=4096
+    override-build: |
+      export PATH="$CRAFT_STAGE/bin:$PATH"
+      # The server listens on every interface; let it bind the `host` option instead.
+      sed -i 's/httpServer\.listen(this\.#config\.port)/httpServer.listen(this.#config.port, process.env.PUTER_LISTEN_HOST || undefined)/' \
+        src/backend/server.ts
+      grep -q 'PUTER_LISTEN_HOST' src/backend/server.ts
+
+      # The same steps as upstream's Dockerfile.
+      npm ci
+      npm run build:ts
+      (cd src/gui && node ./build.js)
+      (cd src/puter-js && npm run build)
+      # Keep only the runtime dependencies.
+      npm prune --omit=dev
+      # The built-in S3 emulator listens on every interface and accepts any
+      # credentials; let the launcher keep it on loopback.
+      sed -i 's/app\.listen({ port, host: "0\.0\.0\.0" })/app.listen({ port, host: process.env.FAUXQS_LISTEN_HOST || "0.0.0.0" })/' \
+        node_modules/fauxqs/dist/app.js
+      grep -q 'FAUXQS_LISTEN_HOST' node_modules/fauxqs/dist/app.js
+
+      app="$CRAFT_PART_INSTALL/app"
+      mkdir -p "$app"
+      cp -a package.json config.default.json dist node_modules src "$app/"
+      # After the prune, sharp is only left in the backend workspace's own
+      # node_modules, which the compiled code in dist/ cannot see.
+      ln -s ../src/backend/node_modules "$app/dist/node_modules"
+      install -Dm644 LICENSE.txt "$CRAFT_PART_INSTALL/share/doc/puter/LICENSE.txt"
+    prime:
+      - app
+      # The docs site and MCP connector are separate tools, not served by the backend.
+      - -app/src/docs
+      - -app/src/mcp-connector
+      # Rebuilds the GUI on source changes with webpack, a dev-only dependency.
+      - -app/dist/extensions/devWatcher.*
+      # Native modules for musl (Alpine) systems; never loaded here.
+      - -app/node_modules/*-musl
+      - -app/node_modules/@*/*-musl
+      - -app/node_modules/@*/*-linuxmusl-*
+      - -app/node_modules/*/prebuilds/*/*.musl.node
+      - share/doc/puter
+
+  scripts:
+    plugin: dump
+    source: snap/local

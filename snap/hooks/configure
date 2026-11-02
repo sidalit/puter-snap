@@ -1,0 +1,49 @@
+#!/bin/sh
+# Validate `snap set puter ...` and restart the service so changes apply.
+set -eu
+
+check_port() {
+  case "$2" in
+    '' | *[!0-9]*)
+      echo "$1 must be a number" >&2
+      exit 1
+      ;;
+  esac
+  if [ "$2" -lt 1 ] || [ "$2" -gt 65535 ]; then
+    echo "$1 must be between 1 and 65535" >&2
+    exit 1
+  fi
+}
+
+check_port port "$(snapctl get port)"
+pub_port="$(snapctl get pub-port)"
+if [ -n "$pub_port" ]; then
+  check_port pub-port "$pub_port"
+fi
+
+case "$(snapctl get host)" in
+  '' | *[!0-9A-Za-z.:-]*)
+    echo "host must be an IP address or host name" >&2
+    exit 1
+    ;;
+esac
+
+case "$(snapctl get domain)" in
+  '' | .* | *. | *..* | *[!0-9A-Za-z.-]*)
+    echo "domain must be a host name, such as puter.example.com" >&2
+    exit 1
+    ;;
+esac
+
+case "$(snapctl get protocol)" in
+  http | https) ;;
+  *)
+    echo "protocol must be http or https" >&2
+    exit 1
+    ;;
+esac
+
+# Also restart an enabled service that is down, so fixing a bad value brings it back.
+if snapctl services "$SNAP_INSTANCE_NAME.puter" | grep -qwE 'enabled|active'; then
+  snapctl restart "$SNAP_INSTANCE_NAME.puter"
+fi
