@@ -1,5 +1,4 @@
 #!/bin/sh
-# Start the service with the settings from `snap set puter ...`.
 set -eu
 
 PUTER_PORT="$(snapctl get port)"

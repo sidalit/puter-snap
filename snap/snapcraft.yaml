@@ -58,7 +58,6 @@ apps:
       - network-bind
 
 parts:
-  # Upstream's image runs on Node 26 (node:26-bookworm-slim); ship the official runtime.
   node:
     plugin: nil
     build-packages:
@@ -103,12 +102,10 @@ parts:
         src/backend/server.ts
       grep -q 'PUTER_LISTEN_HOST' src/backend/server.ts
 
-      # The same steps as upstream's Dockerfile.
       npm ci
       npm run build:ts
       (cd src/gui && node ./build.js)
       (cd src/puter-js && npm run build)
-      # Keep only the runtime dependencies.
       npm prune --omit=dev
       # The built-in S3 emulator listens on every interface and accepts any
       # credentials; let the launcher keep it on loopback.

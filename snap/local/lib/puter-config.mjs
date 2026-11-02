@@ -1,9 +1,4 @@
-// Write the config Puter reads (PUTER_CONFIG_PATH), merged in this order:
-//   1. snap defaults for a self-hosted install, with the generated secrets
-//   2. $SNAP_COMMON/config.json, for any other upstream setting
-//   3. the `snap set puter ...` options
-// Run with `init` from the install hook to only create the secrets and the
-// empty config.json.
+// Snap options override user config; generated secrets supply the defaults.
 import { randomBytes } from 'node:crypto';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 

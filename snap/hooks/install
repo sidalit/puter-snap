@@ -1,6 +1,4 @@
 #!/bin/sh
-# Default settings: listen on this machine only, and generate the secrets that
-# sign sessions and URLs.
 set -eu
 
 snapctl set port=4100 host=127.0.0.1 domain=puter.localhost protocol=http
