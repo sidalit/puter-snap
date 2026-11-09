@@ -11,8 +11,8 @@ on:
       build-from:
         description: Source to build
         type: choice
-        options: [tag, head]
-        default: tag
+        options: [tag, head, both]
+        default: both
       publish:
         description: Publish to the Snap Store
         type: boolean
@@ -20,9 +20,6 @@ on:
 
 jobs:
   snap:
-    uses: sidalit/snap-automation/.github/workflows/snap-build.yaml@v1.2.0
-    with:
-      build-from: ${{ github.event_name == 'schedule' && 'head' || inputs.build-from || 'tag' }}
-      publish: ${{ github.event_name == 'push' || github.event_name == 'schedule' || inputs.publish == true }}
+    uses: sidalit/snap-automation/.github/workflows/snap-build.yaml@v1.3.0
     secrets:
       SNAPCRAFT_STORE_CREDENTIALS: ${{ secrets.SNAPCRAFT_STORE_CREDENTIALS }}
