@@ -5,7 +5,8 @@
   "packageRules": [
     {
       "matchDepNames": ["upstream"],
-      "overridePackageName": "heyputer/puter"
+      "overridePackageName": "heyputer/puter",
+      "versioning": "loose"
     }
   ]
 }
